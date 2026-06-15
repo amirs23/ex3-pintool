@@ -45,20 +45,63 @@ jobs:
     - name: Make binary executable
       run: chmod +x cpugcc_r_base.Oz-m64
 
-    - name: Run btranslate on cpugcc_r_base.Oz-m64
+    - name: Binary search for faulty routine
       run: |
         PIN_ROOT=$(pwd)/pin
-        set +e
-        ${PIN_ROOT}/pin -t obj-intel64/btranslate.so -- \
-          ./cpugcc_r_base.Oz-m64 200.i -o 200.s
-        EXIT_CODE=$?
-        echo "Pin exit code: $EXIT_CODE"
+        PINTOOL=obj-intel64/btranslate.so
+
+        run_pin() {
+          local limit=$1
+          rm -f 200.s
+          if [ "$limit" = "all" ]; then
+            "${PIN_ROOT}/pin" -t "$PINTOOL" -- \
+              ./cpugcc_r_base.Oz-m64 200.i -o 200.s 2>&1
+          else
+            "${PIN_ROOT}/pin" -t "$PINTOOL" -limit_rtn "$limit" -- \
+              ./cpugcc_r_base.Oz-m64 200.i -o 200.s 2>&1
+          fi
+        }
+
+        echo "=== Step 1: verify limit=0 (no translation) succeeds ==="
+        run_pin 0
         if [ -f 200.s ]; then
-          echo "SUCCESS: 200.s was generated ($(wc -l < 200.s) lines)"
+          echo "limit=0: OK"
+          rm -f 200.s
         else
-          echo "FAILED: 200.s was NOT generated"
+          echo "FATAL: even limit=0 fails"
           exit 1
         fi
+
+        echo "=== Step 2: try full translation ==="
+        run_pin all
+        if [ -f 200.s ]; then
+          echo "Full run SUCCESS — 200.s generated!"
+          wc -l 200.s
+          exit 0
+        fi
+        echo "Full run crashes — starting binary search"
+        rm -f 200.s
+
+        echo "=== Step 3: binary search ==="
+        lo=0
+        hi=200000
+        while [ $((hi - lo)) -gt 1 ]; do
+          mid=$(( (lo + hi) / 2 ))
+          echo "--- limit=$mid (lo=$lo hi=$hi) ---"
+          output=$(run_pin $mid 2>&1)
+          if [ -f 200.s ]; then
+            echo "limit=$mid: OK"
+            lo=$mid
+            rm -f 200.s
+          else
+            echo "limit=$mid: CRASH"
+            hi=$mid
+          fi
+        done
+
+        echo "=== Faulty routine is #$hi ==="
+        echo "=== Running limit=$hi to get routine name ==="
+        run_pin $hi 2>&1 | grep "BSEARCH"
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4

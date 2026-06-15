@@ -851,12 +851,18 @@ int find_candidate_rtns_for_tc(IMG img)
 
             // Binary-search support: skip routines beyond the limit.
             INT max_rtn = KnobMaxRtnCount.Value();
-            if (max_rtn >= 0 && rtn_count > (unsigned)max_rtn) {
-                if (rtn_count == (unsigned)max_rtn + 1)
-                    cerr << "Binary search: stopped before rtn #" << rtn_count
+            if (max_rtn >= 0) {
+                if (rtn_count == (unsigned)max_rtn)
+                    cerr << "BSEARCH last_translated #" << rtn_count
                          << " \"" << RTN_Name(rtn) << "\" addr=0x"
                          << hex << RTN_Address(rtn) << "\n";
-                continue;
+                if (rtn_count > (unsigned)max_rtn) {
+                    if (rtn_count == (unsigned)max_rtn + 1)
+                        cerr << "BSEARCH first_skipped #" << rtn_count
+                             << " \"" << RTN_Name(rtn) << "\" addr=0x"
+                             << hex << RTN_Address(rtn) << "\n";
+                    continue;
+                }
             }
 
             // Open the RTN.
