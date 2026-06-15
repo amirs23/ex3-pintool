@@ -45,64 +45,30 @@ jobs:
     - name: Make binary executable
       run: chmod +x cpugcc_r_base.Oz-m64
 
-    - name: Binary search for faulty routine
-      timeout-minutes: 55
+    - name: Sanity check (run without Pin)
       run: |
-        set +e
+        echo "=== Running cpugcc WITHOUT Pin ==="
+        timeout 120 ./cpugcc_r_base.Oz-m64 200.i -o 200.s_nopin
+        if [ -f 200.s_nopin ]; then
+          echo "No-Pin run: OK ($(wc -l < 200.s_nopin) lines)"
+          rm 200.s_nopin
+        else
+          echo "No-Pin run: FAILED"
+          exit 1
+        fi
+
+    - name: Run btranslate pintool
+      run: |
         PIN_ROOT=$(pwd)/pin
-        PINTOOL=obj-intel64/btranslate.so
-
-        run_pin() {
-          local limit=$1
-          rm -f 200.s
-          local args=""
-          [ "$limit" != "all" ] && args="-limit_rtn $limit"
-          timeout 60 "${PIN_ROOT}/pin" -t "$PINTOOL" $args -- \
-            ./cpugcc_r_base.Oz-m64 200.i -o 200.s
-          return 0
-        }
-
-        check() {
-          [ -f 200.s ] && { echo "OK"; return 0; } || { echo "CRASH"; return 1; }
-        }
-
-        echo "=== Step 1: verify limit=0 (baseline) ==="
-        run_pin 0 2>/dev/null
-        if ! check; then
-          echo "WARNING: limit=0 produced no 200.s — continuing anyway"
+        echo "=== Running with Pin + btranslate ==="
+        timeout 300 "${PIN_ROOT}/pin" -t obj-intel64/btranslate.so -- \
+          ./cpugcc_r_base.Oz-m64 200.i -o 200.s
+        if [ -f 200.s ]; then
+          echo "SUCCESS: 200.s generated ($(wc -l < 200.s) lines)"
+        else
+          echo "FAILED: 200.s not generated"
+          exit 1
         fi
-        rm -f 200.s
-
-        echo "=== Step 2: try full translation ==="
-        run_pin all 2>/dev/null
-        if check; then
-          echo "SUCCESS: 200.s generated with full translation!"
-          wc -l 200.s
-          exit 0
-        fi
-        rm -f 200.s
-        echo "Full run crashes — starting binary search"
-
-        echo "=== Step 3: binary search ==="
-        lo=0
-        hi=200000
-        while [ $((hi - lo)) -gt 1 ]; do
-          mid=$(( (lo + hi) / 2 ))
-          echo "--- limit=$mid (lo=$lo hi=$hi) ---"
-          run_pin $mid 2>/dev/null
-          if check; then
-            lo=$mid; rm -f 200.s
-          else
-            hi=$mid; rm -f 200.s
-          fi
-        done
-
-        echo "=== Binary search done: faulty routine is #$hi ==="
-        echo "=== Running limit=$hi to identify routine name ==="
-        run_pin $hi 2>&1 | grep "BSEARCH" || true
-
-        echo "=== Also running limit=$lo (last good) ==="
-        run_pin $lo 2>&1 | grep "BSEARCH" || true
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4

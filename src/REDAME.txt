@@ -9,7 +9,7 @@ ID:        212247365
 The original btranslate.cpp pintool (Probe mode) failed with a Segmentation
 fault when run on cpugcc_r_base.Oz-m64, producing no 200.s output.
 
-Two bugs were found and fixed:
+Three bugs were found and fixed:
 
 Bug 1 - Off-by-one error in jump_to_orig_addr_map (fix_direct_jmp_or_call_to_orig_addr):
   The original code incremented jump_to_orig_addr_num BEFORE assigning it as
@@ -29,8 +29,24 @@ Bug 2 - Missing RTN_IsSafeForProbedReplacement check (commit_translated_rtns_to_
   Fix: call RTN_IsSafeForProbedReplacement(rtn) and skip the routine if it
   returns false.
 
-A -max_rtn KNOB was also added to support binary-search isolation of faulty
-routines during debugging (pass -max_rtn N to translate only the first N
+Bug 3 - Double replacement of _exit causes infinite recursion (create_tc):
+  The create_tc callback runs for every image loaded (libc, the main binary,
+  and any other shared library). RTN_FindByName(img, "_exit") can return a
+  valid routine in more than one image: the real _exit in libc and the PLT
+  stub for _exit in the main binary. The original code replaced _exit without
+  checking whether it had already been replaced. The second call to
+  RTN_ReplaceProbed overwrote origExit with a trampoline pointing back to the
+  PLT stub, which is itself probed to call ExitInProbeMode. When the program
+  eventually called _exit, ExitInProbeMode called (*origExit), which jumped
+  back into ExitInProbeMode via the PLT probe, creating infinite recursion,
+  a stack overflow, and a Segmentation fault — even with zero routines
+  translated (limit_rtn 0).
+  Fix: guard the replacement with origExit == NULL so _exit is probed only
+  once (the first valid, safe occurrence found across all images). Also added
+  a NULL check before calling (*origExit) in ExitInProbeMode as a safety net.
+
+A -limit_rtn KNOB was also added to support binary-search isolation of faulty
+routines during debugging (pass -limit_rtn N to translate only the first N
 routines).
 
 === Compilation ===

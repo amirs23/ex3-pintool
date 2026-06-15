@@ -1156,7 +1156,8 @@ VOID Fini(INT32 code, VOID* v)
 VOID ExitInProbeMode(INT code)
 {
     Fini(code, 0);
-    (*origExit)(code);
+    if (origExit)
+        (*origExit)(code);
 }
 
 /*************/
@@ -1164,10 +1165,17 @@ VOID ExitInProbeMode(INT code)
 /*************/
 VOID create_tc(IMG img, VOID *v)
 {
-    // Insert a call to function Fini when raching the _exit routine.
-    RTN exitRtn = RTN_FindByName(img, "_exit");
-    if (RTN_Valid(exitRtn) && RTN_IsSafeForProbedReplacement(exitRtn)) {
-      origExit = (EXITFUNCPTR)RTN_ReplaceProbed(exitRtn, AFUNPTR(ExitInProbeMode));
+    // Insert a call to function Fini when reaching the _exit routine.
+    // Guard with origExit == NULL so we only probe _exit once (it may be found in
+    // both libc and the main binary's PLT stub; replacing both causes infinite
+    // recursion through ExitInProbeMode → (*origExit) → probed PLT → ExitInProbeMode).
+    if (origExit == NULL) {
+        RTN exitRtn = RTN_FindByName(img, "_exit");
+        if (RTN_Valid(exitRtn) && RTN_IsSafeForProbedReplacement(exitRtn)) {
+            AFUNPTR saved = RTN_ReplaceProbed(exitRtn, AFUNPTR(ExitInProbeMode));
+            if (saved != NULL)
+                origExit = (EXITFUNCPTR)saved;
+        }
     }
 
     // Step 0: Check the image and the CPU:
