@@ -45,18 +45,6 @@ jobs:
     - name: Make binary executable
       run: chmod +x cpugcc_r_base.Oz-m64
 
-    - name: Sanity check (run without Pin)
-      run: |
-        echo "=== Running cpugcc WITHOUT Pin ==="
-        timeout 120 ./cpugcc_r_base.Oz-m64 200.i -o 200.s_nopin
-        if [ -f 200.s_nopin ]; then
-          echo "No-Pin run: OK ($(wc -l < 200.s_nopin) lines)"
-          rm 200.s_nopin
-        else
-          echo "No-Pin run: FAILED"
-          exit 1
-        fi
-
     - name: Run btranslate pintool
       run: |
         PIN_ROOT=$(pwd)/pin

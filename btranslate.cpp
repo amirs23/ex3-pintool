@@ -849,6 +849,11 @@ int find_candidate_rtns_for_tc(IMG img)
         {
             rtn_count++;
 
+            // Skip _init: its translation produces code that causes a
+            // run-time failure (SIGILL from incorrectly re-encoded instructions).
+            if (RTN_Name(rtn) == "_init")
+                continue;
+
             // Binary-search support: skip routines beyond the limit.
             INT max_rtn = KnobMaxRtnCount.Value();
             if (max_rtn >= 0) {
