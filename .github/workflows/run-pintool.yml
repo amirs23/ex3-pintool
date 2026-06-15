@@ -73,7 +73,7 @@ jobs:
         fi
 
         echo "=== Step 2: try full translation ==="
-        run_pin all
+        run_pin all || true
         if [ -f 200.s ]; then
           echo "Full run SUCCESS — 200.s generated!"
           wc -l 200.s
@@ -88,7 +88,7 @@ jobs:
         while [ $((hi - lo)) -gt 1 ]; do
           mid=$(( (lo + hi) / 2 ))
           echo "--- limit=$mid (lo=$lo hi=$hi) ---"
-          output=$(run_pin $mid 2>&1)
+          run_pin $mid || true
           if [ -f 200.s ]; then
             echo "limit=$mid: OK"
             lo=$mid
@@ -101,7 +101,7 @@ jobs:
 
         echo "=== Faulty routine is #$hi ==="
         echo "=== Running limit=$hi to get routine name ==="
-        run_pin $hi 2>&1 | grep "BSEARCH"
+        run_pin $hi 2>&1 | grep "BSEARCH" || true
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
