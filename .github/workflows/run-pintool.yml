@@ -1,0 +1,70 @@
+name: Build and Run btranslate (Pin 4.0)
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Download Pin 4.0
+      run: |
+        wget -q https://software.intel.com/sites/landingpage/pintool/downloads/pin-external-4.0-99633-g5ca9893f2-gcc-linux.tar.gz -O pin.tar.gz
+        tar -xzf pin.tar.gz
+        mv pin-external-4.0-* pin
+
+    - name: Build btranslate.so with Pin 4.0
+      run: |
+        PIN_ROOT=$(pwd)/pin
+        PINCC=${PIN_ROOT}/intel64/pinrt/bin/pin-g++
+        mkdir -p obj-intel64
+        ${PINCC} \
+          -std=c++17 \
+          -Wall -Wno-unknown-pragmas \
+          -fno-stack-protector -fno-exceptions \
+          -funwind-tables -fasynchronous-unwind-tables \
+          -fno-rtti -fPIC -faligned-new \
+          -O3 -fomit-frame-pointer -fno-strict-aliasing \
+          -I${PIN_ROOT}/source/include/pin \
+          -I${PIN_ROOT}/source/include/pin/gen \
+          -I${PIN_ROOT}/extras/components/include \
+          -I${PIN_ROOT}/extras/xed-intel64/include/xed \
+          -I${PIN_ROOT}/source/tools/InstLib \
+          -isystem ${PIN_ROOT}/intel64/pinrt/include/adaptor \
+          -shared -Wl,-Bsymbolic \
+          -Wl,--version-script=${PIN_ROOT}/source/include/pin/pintool.ver \
+          -o obj-intel64/btranslate.so btranslate.cpp \
+          -L${PIN_ROOT}/intel64/lib \
+          -L${PIN_ROOT}/intel64/pinrt/lib \
+          -L${PIN_ROOT}/extras/xed-intel64/lib \
+          -lpin -lpinrt-adaptor-static -lxed -lpindwarf -ldwarf -lunwind-dynamic
+
+    - name: Make binary executable
+      run: chmod +x cpugcc_r_base.Oz-m64
+
+    - name: Run btranslate on cpugcc_r_base.Oz-m64
+      run: |
+        PIN_ROOT=$(pwd)/pin
+        set +e
+        ${PIN_ROOT}/pin -t obj-intel64/btranslate.so -- \
+          ./cpugcc_r_base.Oz-m64 200.i -o 200.s
+        EXIT_CODE=$?
+        echo "Pin exit code: $EXIT_CODE"
+        if [ -f 200.s ]; then
+          echo "SUCCESS: 200.s was generated ($(wc -l < 200.s) lines)"
+        else
+          echo "FAILED: 200.s was NOT generated"
+          exit 1
+        fi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: btranslate-results
+        path: |
+          obj-intel64/btranslate.so
+          200.s

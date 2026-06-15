@@ -1,0 +1,50 @@
+Full Name: Sari Morkos
+ID:        325390078
+
+Full Name: Amir Said
+ID:        212247365
+
+=== Description of the Bug and Fix ===
+
+The original btranslate.cpp pintool (Probe mode) failed with a Segmentation
+fault when run on cpugcc_r_base.Oz-m64, producing no 200.s output.
+
+Two bugs were found and fixed:
+
+Bug 1 - Off-by-one error in jump_to_orig_addr_map (fix_direct_jmp_or_call_to_orig_addr):
+  The original code incremented jump_to_orig_addr_num BEFORE assigning it as
+  the new entry index, so entries started at index 1 (index 0 was never used).
+  The deduplication search looped from 0 to jump_to_orig_addr_num-1, which
+  never covered the actual stored entries, so every call added a new slot
+  instead of reusing existing ones. This caused the map to fill up much faster
+  than its max_rtn_count capacity.
+  Fix: assign the index first, store the entry, then increment the counter.
+
+Bug 2 - Missing RTN_IsSafeForProbedReplacement check (commit_translated_rtns_to_tc):
+  The original code called RTN_ReplaceProbed for every translated routine
+  without first verifying that the routine is safe for probe insertion. For
+  routines that are too small (fewer than 5 bytes) or that share code with
+  adjacent routines, writing the probe trampoline overwrites neighbouring code,
+  causing memory corruption and a subsequent Segmentation fault.
+  Fix: call RTN_IsSafeForProbedReplacement(rtn) and skip the routine if it
+  returns false.
+
+A -max_rtn KNOB was also added to support binary-search isolation of faulty
+routines during debugging (pass -max_rtn N to translate only the first N
+routines).
+
+=== Compilation ===
+
+Set PIN_ROOT to your Pin 4.0 installation directory, then run:
+
+    make PIN_ROOT=/path/to/pin
+
+The compiled tool will be placed at:
+
+    obj-intel64/btranslate.so
+
+=== How to Run the Tool ===
+
+    $PIN_ROOT/pin -t obj-intel64/btranslate.so -- cpugcc_r_base.Oz-m64 200.i -o 200.s
+
+Output: 200.s (assembly translation of the 200.i input file)
