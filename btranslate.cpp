@@ -108,7 +108,7 @@ KNOB<BOOL>   KnobDoNotCommitTranslatedCode(KNOB_MODE_WRITEONCE,    "pintool",
     "no_tc_commit", "0", "Do not commit translated code");
 
 KNOB<INT>    KnobMaxRtnCount(KNOB_MODE_WRITEONCE,    "pintool",
-    "max_rtn", "-1", "Max routines to translate for binary search (-1 = unlimited)");
+    "limit_rtn", "-1", "Max routines to translate for binary search (-1 = unlimited)");
 
 
 
