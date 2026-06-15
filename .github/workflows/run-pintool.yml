@@ -45,33 +45,17 @@ jobs:
     - name: Make binary executable
       run: chmod +x cpugcc_r_base.Oz-m64
 
-    - name: Diagnose limit=0 (show full Pin output)
-      continue-on-error: true
-      run: |
-        PIN_ROOT=$(pwd)/pin
-        echo "=== limit=0: full Pin stderr visible ==="
-        "${PIN_ROOT}/pin" -t obj-intel64/btranslate.so -limit_rtn 0 -- \
-          ./cpugcc_r_base.Oz-m64 200.i -o 200.s
-        echo "Exit code: $?"
-        if [ -f 200.s ]; then
-          echo "limit=0: OK ($(wc -l < 200.s) lines)"
-          rm -f 200.s
-        else
-          echo "limit=0: FAILED (no 200.s)"
-        fi
-
     - name: Run btranslate pintool (full translation)
-      continue-on-error: true
       run: |
         PIN_ROOT=$(pwd)/pin
-        echo "=== Full translation: stderr visible ==="
+        echo "=== Running Pin + btranslate (full translation) ==="
         "${PIN_ROOT}/pin" -t obj-intel64/btranslate.so -- \
           ./cpugcc_r_base.Oz-m64 200.i -o 200.s
-        echo "Exit code: $?"
         if [ -f 200.s ]; then
-          echo "Full translation: OK ($(wc -l < 200.s) lines)"
+          echo "SUCCESS: 200.s generated ($(wc -l < 200.s) lines)"
         else
-          echo "Full translation: FAILED"
+          echo "FAILED: 200.s not generated"
+          exit 1
         fi
 
     - name: Upload artifacts

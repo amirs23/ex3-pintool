@@ -523,14 +523,17 @@ int fix_rip_displacement(unsigned instr_map_entry)
         return -1;
     }
 
-    // Set the memory displacement using a bit length.
-    xed_encoder_request_set_memory_displacement (&xedd, new_disp, new_disp_byts);
-
     unsigned max_size = XED_MAX_INSTRUCTION_BYTES;
     unsigned new_size = 0;
 
-    // Converts the decoder request to a valid encoder request:
+    // Converts the decoder request to a valid encoder request first,
+    // THEN override the displacement — init_from_decode resets all encoder
+    // fields from the decoded state, so calling it after set_memory_displacement
+    // would overwrite the corrected displacement with the original one.
     xed_encoder_request_init_from_decode (&xedd);
+
+    // Set the memory displacement using a bit length.
+    xed_encoder_request_set_memory_displacement (&xedd, new_disp, new_disp_byts);
 
     xed_error_enum_t xed_error =
        xed_encode (&xedd, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins),

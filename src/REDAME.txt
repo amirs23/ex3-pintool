@@ -9,7 +9,7 @@ ID:        212247365
 The original btranslate.cpp pintool (Probe mode) failed with a Segmentation
 fault when run on cpugcc_r_base.Oz-m64, producing no 200.s output.
 
-Three bugs were found and fixed:
+Four bugs were found and fixed:
 
 Bug 1 - Off-by-one error in jump_to_orig_addr_map (fix_direct_jmp_or_call_to_orig_addr):
   The original code incremented jump_to_orig_addr_num BEFORE assigning it as
@@ -39,15 +39,30 @@ Bug 3 - Double replacement of _exit causes infinite recursion (create_tc):
   PLT stub, which is itself probed to call ExitInProbeMode. When the program
   eventually called _exit, ExitInProbeMode called (*origExit), which jumped
   back into ExitInProbeMode via the PLT probe, creating infinite recursion,
-  a stack overflow, and a Segmentation fault — even with zero routines
-  translated (limit_rtn 0).
+  a stack overflow, and a Segmentation fault.
   Fix: guard the replacement with origExit == NULL so _exit is probed only
   once (the first valid, safe occurrence found across all images). Also added
   a NULL check before calling (*origExit) in ExitInProbeMode as a safety net.
 
+Bug 4 - Wrong call order in fix_rip_displacement corrupts RIP-relative encoding:
+  In fix_rip_displacement, xed_encoder_request_set_memory_displacement was
+  called BEFORE xed_encoder_request_init_from_decode. The init_from_decode
+  call copies all fields from the decoded instruction into the encoder request,
+  which OVERWRITES the corrected displacement that was just set. As a result,
+  every RIP-relative instruction in the translation cache was re-encoded with
+  its original displacement rather than the recalculated one. This caused
+  incorrect memory accesses in the TC — most went unnoticed because the TC is
+  allocated close to the original code, but eventually an access landed in the
+  wrong segment, producing a Segmentation fault during execution.
+  Fix: call xed_encoder_request_init_from_decode first, then call
+  xed_encoder_request_set_memory_displacement to override the displacement.
+  (This matches the correct pattern already used in fix_direct_jmp_or_call_
+  displacement, which calls init_from_decode before set_branch_displacement.)
+
 A -limit_rtn KNOB was also added to support binary-search isolation of faulty
 routines during debugging (pass -limit_rtn N to translate only the first N
-routines).
+routines). The _init routine is also skipped from translation as its translated
+code causes a run-time failure.
 
 === Compilation ===
 
