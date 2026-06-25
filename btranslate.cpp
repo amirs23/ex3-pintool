@@ -857,6 +857,20 @@ int find_candidate_rtns_for_tc(IMG img)
             if (RTN_Name(rtn) == "_init")
                 continue;
 
+            // Skip PLT stubs (e.g. "foo@plt"). PLT stubs implement lazy dynamic
+            // symbol resolution: an unresolved entry pushes a relocation index
+            // and jumps to the resolver (_dl_runtime_resolve), which relies on the
+            // exact, original layout of the stub and the stack alignment at entry.
+            // Relocating a PLT stub into the translation cache corrupts the
+            // resolver's arguments (garbage link_map / misaligned xsavec buffer),
+            // crashing inside _dl_fixup. Leave PLT stubs as original code.
+            {
+                const string &rname = RTN_Name(rtn);
+                if (rname.size() >= 4 &&
+                    rname.compare(rname.size() - 4, 4, "@plt") == 0)
+                    continue;
+            }
+
             // Binary-search support: skip routines beyond the limit.
             INT max_rtn = KnobMaxRtnCount.Value();
             if (max_rtn >= 0) {

@@ -9,7 +9,7 @@ ID:        212247365
 The original btranslate.cpp pintool (Probe mode) failed with a Segmentation
 fault when run on cpugcc_r_base.Oz-m64, producing no 200.s output.
 
-Four bugs were found and fixed:
+Five bugs were found and fixed:
 
 Bug 1 - Off-by-one error in jump_to_orig_addr_map (fix_direct_jmp_or_call_to_orig_addr):
   The original code incremented jump_to_orig_addr_num BEFORE assigning it as
@@ -59,10 +59,38 @@ Bug 4 - Wrong call order in fix_rip_displacement corrupts RIP-relative encoding:
   (This matches the correct pattern already used in fix_direct_jmp_or_call_
   displacement, which calls init_from_decode before set_branch_displacement.)
 
+Bug 5 - Translating PLT stubs breaks lazy dynamic-symbol resolution (find_candidate_rtns_for_tc):
+  After the first four fixes the tool still crashed with a Segmentation fault.
+  Isolating the crash with the -limit_rtn knob showed that the failure was
+  non-monotonic and layout-dependent (it appeared for some routine counts and
+  not others), the classic signature of memory/stack corruption that only
+  sometimes lands fatally. A core-dump backtrace pinned the crash inside
+  _dl_fixup / _dl_runtime_resolve_xsavec (the dynamic linker's lazy PLT
+  resolver), with a garbage link_map pointer.
+  The cause: the candidate-selection loop was translating the PLT stub routines
+  (entries named "<sym>@plt") and relocating them into the translation cache.
+  A PLT stub implements lazy binding: on first call it pushes a relocation index
+  and jumps to the resolver, which depends on the stub's exact original location
+  and on the stack alignment at entry (xsavec needs an aligned save area). Moving
+  the stub into the TC corrupts the resolver's arguments and the saved-state
+  buffer, crashing inside _dl_fixup.
+  Fix: skip any routine whose name ends with "@plt" in
+  find_candidate_rtns_for_tc, leaving PLT stubs as original code. Calls from
+  translated routines still reach functions correctly through the original PLT.
+  With this fix the full binary is translated successfully and 200.s is produced
+  byte-for-byte identical to the reference output.
+
 A -limit_rtn KNOB was also added to support binary-search isolation of faulty
 routines during debugging (pass -limit_rtn N to translate only the first N
 routines). The _init routine is also skipped from translation as its translated
 code causes a run-time failure.
+
+=== Testing ===
+
+The tool was built with Pin 4.0 (pin-4.0-99633) on Linux x86-64 and run with the
+exact command below. It completes with exit code 0 and produces 200.s identical
+(byte-for-byte / matching SHA-256) to the provided reference 200.s, across
+repeated runs.
 
 === Compilation ===
 
@@ -74,7 +102,16 @@ The compiled tool will be placed at:
 
     obj-intel64/btranslate.so
 
+The submitted binary ex3.so is exactly this compiled obj-intel64/btranslate.so
+(renamed to ex3.so as required by the submission instructions).
+
 === How to Run the Tool ===
+
+Using the submitted prebuilt binary:
+
+    $PIN_ROOT/pin -t ex3.so -- cpugcc_r_base.Oz-m64 200.i -o 200.s
+
+Or using the freshly compiled binary:
 
     $PIN_ROOT/pin -t obj-intel64/btranslate.so -- cpugcc_r_base.Oz-m64 200.i -o 200.s
 
